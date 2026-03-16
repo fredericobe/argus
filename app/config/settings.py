@@ -6,12 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ArgusSettings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-        case_sensitive=False,
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", case_sensitive=False)
 
     openai_api_key: str = Field(alias="ARGUS_OPENAI_API_KEY")
     model_provider: str = Field(default="openai", alias="ARGUS_MODEL_PROVIDER")
@@ -26,20 +21,20 @@ class ArgusSettings(BaseSettings):
     screenshot_dir: Path = Field(default=Path("screenshots"), alias="ARGUS_SCREENSHOT_DIR")
 
     max_agent_steps: int = Field(default=12, alias="ARGUS_MAX_AGENT_STEPS")
-    allowed_domains: list[str] = Field(
-        default_factory=lambda: ["amazon.com", "www.amazon.com"],
-        alias="ARGUS_ALLOWED_DOMAINS",
-    )
+    allowed_domains: list[str] = Field(default_factory=lambda: ["amazon.com", "www.amazon.com"], alias="ARGUS_ALLOWED_DOMAINS")
     blocked_domains: list[str] = Field(default_factory=list, alias="ARGUS_BLOCKED_DOMAINS")
     log_level: str = Field(default="INFO", alias="ARGUS_LOG_LEVEL")
 
     enable_generated_capabilities: bool = Field(default=False, alias="ARGUS_ENABLE_GENERATED_CAPABILITIES")
     sandbox_enabled: bool = Field(default=True, alias="ARGUS_SANDBOX_ENABLED")
+    generated_capability_storage_path: Path = Field(default=Path(".argus/capabilities"), alias="ARGUS_GENERATED_CAPABILITY_STORAGE_PATH")
+    generated_capability_timeout: int = Field(default=10, alias="ARGUS_GENERATED_CAPABILITY_TIMEOUT")
+    generated_capability_promotion_threshold: float = Field(default=0.8, alias="ARGUS_GENERATED_CAPABILITY_PROMOTION_THRESHOLD")
+    generated_capability_max_attempts: int = Field(default=2, alias="ARGUS_GENERATED_CAPABILITY_MAX_ATTEMPTS")
+    capability_memory_enabled: bool = Field(default=True, alias="ARGUS_CAPABILITY_MEMORY_ENABLED")
+
     capability_storage_path: Path = Field(default=Path(".argus/capability_memory.json"), alias="ARGUS_CAPABILITY_STORAGE_PATH")
-    max_generated_capability_attempts: int = Field(default=2, alias="ARGUS_MAX_GENERATED_CAPABILITY_ATTEMPTS")
     evaluator_strict_mode: bool = Field(default=True, alias="ARGUS_EVALUATOR_STRICT_MODE")
-    allow_generated_code_execution: bool = Field(default=False, alias="ARGUS_ALLOW_GENERATED_CODE_EXECUTION")
-    generated_capability_timeout_seconds: int = Field(default=10, alias="ARGUS_GENERATED_CAPABILITY_TIMEOUT_SECONDS")
 
     @field_validator("allowed_domains", "blocked_domains", mode="before")
     @classmethod
@@ -57,4 +52,5 @@ def get_settings() -> ArgusSettings:
     settings.screenshot_dir.mkdir(parents=True, exist_ok=True)
     settings.session_state_path.parent.mkdir(parents=True, exist_ok=True)
     settings.capability_storage_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.generated_capability_storage_path.mkdir(parents=True, exist_ok=True)
     return settings

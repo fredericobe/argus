@@ -1,9 +1,10 @@
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class PlannerDecision(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     skill_name: str = Field(alias="skill")
     arguments: dict[str, Any] = Field(default_factory=dict)
     rationale: str = Field(default="", alias="reasoning")

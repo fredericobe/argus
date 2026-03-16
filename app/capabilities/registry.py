@@ -3,11 +3,10 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timezone
 
-from app.capabilities.models import Capability, CapabilityType, RiskLevel
+from app.capabilities.models import Capability, CapabilityStatus, CapabilityType, RiskLevel
 
 
 class CapabilityRegistry:
-    """Catálogo em memória de capacidades com APIs de registro, busca e relevância."""
     def __init__(self) -> None:
         self._by_id: dict[str, Capability] = {}
         self._by_name: dict[str, str] = {}
@@ -37,7 +36,7 @@ class CapabilityRegistry:
         max_risk: RiskLevel | None = None,
     ) -> list[Capability]:
         risk_order = {RiskLevel.LOW: 0, RiskLevel.MEDIUM: 1, RiskLevel.HIGH: 2}
-        items = list(self._by_id.values())
+        items = [c for c in self._by_id.values() if c.status != CapabilityStatus.REJECTED]
         if capability_type:
             items = [c for c in items if c.capability_type == capability_type]
         if domain:
@@ -49,13 +48,15 @@ class CapabilityRegistry:
     def resolve_by_relevance(self, task: str, domain: str | None = None) -> Capability | None:
         task_tokens = {token.lower() for token in task.split()}
         candidates = self.list_capabilities(domain=domain)
-        best: tuple[int, Capability] | None = None
+        best: tuple[tuple[int, int], Capability] | None = None
         for cap in candidates:
             text_tokens = {*(cap.name.lower().split("_")), *(cap.description.lower().split()), *[t.lower() for t in cap.tags]}
-            score = len(task_tokens.intersection(text_tokens)) + self._usage[cap.id]
+            overlap = len(task_tokens.intersection(text_tokens))
+            stability = 2 if cap.capability_type == CapabilityType.STABLE else 1
+            score = (overlap + self._usage[cap.id], stability)
             if best is None or score > best[0]:
                 best = (score, cap)
-        if best and best[0] > 0:
+        if best and best[0][0] > 0:
             return best[1]
         return None
 

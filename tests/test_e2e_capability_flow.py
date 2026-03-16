@@ -77,7 +77,7 @@ def test_e2e_stable_generated_success_failure_and_reuse(tmp_path: Path) -> None:
     runtime2, registry2, memory2 = _runtime("new_unknown", tmp_path)
     final_obs2, audit2 = runtime2.run("new task", "start")
     assert final_obs2.kind == "task_finished"
-    assert audit2[0].observation_kind in {"skill_completed", "error_occurred"}
+    assert audit2[0].observation_kind in {"skill_completed", "error_occurred", "generated_capability_created", "generated_capability_reused"}
     assert len(memory2.all_records()) >= 1
 
     # Rejected capability not reused

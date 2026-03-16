@@ -9,30 +9,33 @@ from app.safety.safety_policy import SafetyPolicy, SafetyViolationError
 
 @dataclass(slots=True)
 class EvaluationResult:
-    """Veredito de qualidade/safety para uso e possível promoção da capacidade."""
     accepted: bool
     promotable: bool
     reason: str
+    score: float
+    evidence_quality: float
 
 
 class CapabilityEvaluator:
-    """Critic que valida evidência, conformidade de domínio e aceitabilidade de saída."""
     def __init__(self, safety_policy: SafetyPolicy, strict_mode: bool = True) -> None:
         self.safety_policy = safety_policy
         self.strict_mode = strict_mode
 
     def evaluate(self, capability: Capability, result: SandboxResult) -> EvaluationResult:
         if not result.passed:
-            return EvaluationResult(accepted=False, promotable=False, reason=result.reason or "sandbox failed")
+            return EvaluationResult(False, False, result.reason or "sandbox failed", score=0.0, evidence_quality=0.0)
 
         evidence = result.output.get("evidence") if isinstance(result.output, dict) else None
-        if self.strict_mode and (not isinstance(evidence, list) or not evidence):
-            return EvaluationResult(accepted=False, promotable=False, reason="missing evidence")
+        evidence_quality = float(len(evidence)) if isinstance(evidence, list) else 0.0
+        if self.strict_mode and evidence_quality <= 0:
+            return EvaluationResult(False, False, "missing evidence", score=0.0, evidence_quality=0.0)
 
         try:
             for domain in capability.allowed_domains:
                 self.safety_policy.validate_skill("navigate_to_url", {"url": f"https://{domain}"})
         except SafetyViolationError as exc:
-            return EvaluationResult(accepted=False, promotable=False, reason=f"unsafe domain usage: {exc}")
+            return EvaluationResult(False, False, f"unsafe domain usage: {exc}", score=0.0, evidence_quality=evidence_quality)
 
-        return EvaluationResult(accepted=True, promotable=True, reason="evaluation accepted")
+        score = min(1.0, 0.6 + min(evidence_quality, 4.0) * 0.1)
+        promotable = True
+        return EvaluationResult(True, promotable, "evaluation accepted", score=score, evidence_quality=evidence_quality)

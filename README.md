@@ -2,153 +2,77 @@
 
 Argus is an AI-powered internet operator that can navigate websites on behalf of a user. It combines LLM planning with browser automation and strict safety controls.
 
-Example user goal:
+## Argus Capability Learning Architecture
 
-> "Check whether my latest Amazon order has been delivered."
+### Capability model
+Argus uses first-class capability records for `stable`, `generated_temporary`, `generated_candidate`, `approved_stable`, and `rejected` states. Each capability stores id/version, declared domains, implementation kind, and metadata required for deterministic execution and auditing.
 
-## Architecture
+### Generation pipeline
+Generated capability flow is now operational:
+1. `spec_created`
+2. `generation_completed`
+3. `package_validated`
+4. `sandbox_executed`
+5. `evaluation_completed`
+6. `capability_registered` or `capability_rejected`
 
-Argus now supports a capability-oriented execution loop:
+Generated packages include capability id, version, declared domains, entrypoint, metadata, and source code.
 
-```text
-User Request
-   ↓
-Planner (LLM)
-   ↓
-Capability Resolver
-   ↓
-Capability Type Decision
-   ├─ Stable skill-backed capability
-   ├─ Learned capability
-   ├─ Generated temporary capability (sandboxed)
-   └─ Human confirmation / safe fail
-   ↓
-Executor / Sandbox
-   ↓
-Observation + Audit
-   ↓
-Evaluator / Critic
-   ↓
-Capability Memory + Promotion lifecycle
-```
+### Sandbox validation
+Sandbox validation enforces:
+- entrypoint presence (`run(arguments[, context])`)
+- import allowlist checks
+- blocked dangerous calls (`open`, `exec`, `eval`, etc.)
+- execution timeout
+- controlled context that blocks undeclared domain access
 
-### Core Components
+### Evaluator
+Evaluator verifies sandbox result success, evidence quality, and safety-policy compatibility (including domain governance). It emits structured score/evidence metrics for lifecycle and memory.
 
-- **Planner (`app/planner/`)**
-  - Produces structured next actions.
-- **Capabilities (`app/capabilities/`)**
-  - First-class model for stable, learned, and generated capabilities.
-  - Includes registry, resolver, lifecycle, and memory.
-- **Skills (`app/skills/`)**
-  - Existing stable skills remain unchanged and are wrapped as stable capabilities.
-- **Builder (`app/builder/`)**
-  - Builds temporary capabilities via spec → code provider → sandbox → evaluator.
-- **Executors (`app/executors/`)**
-  - Low-level browser actions and interaction primitives.
-- **Safety (`app/safety/`)**
-  - Domain allow/block rules, max steps, destructive-action confirmation.
-- **Credentials (`app/credentials/`)**
-  - Composite provider; generated capabilities do not bypass this path.
-- **Observability (`app/models/audit.py`)**
-  - Per-step, auditable records across stable and generated paths.
-
-## Capability Model
-
-Each capability tracks:
-
-- id, name, description, version
-- status, risk_level, capability_type
-- allowed_domains, required_inputs, expected_outputs
-- implementation_kind, tags, author/source
-- created_at, updated_at
-
-Supported types:
-
-- `stable`
-- `learned`
+### Lifecycle and promotion
+Lifecycle states:
 - `generated_temporary`
 - `generated_candidate`
+- `approved_stable`
+- `rejected`
 
-Supported implementation kinds:
+Promotion policy is configurable (minimum successful runs, evaluator score threshold, safety violations, evidence completeness).
 
-- `skill`
-- `browser_workflow`
-- `api_adapter`
-- `generated_code`
+### Artifact storage
+Generated capability artifacts are persisted to filesystem storage:
 
-## Capability Resolver
-
-Resolution order is explicit and auditable:
-
-1. Stable capability match
-2. Learned capability match
-3. Generated capability path
-4. Human confirmation or safe failure
-
-High-risk capabilities return a confirmation path instead of direct execution.
-
-## Generated Capability Lifecycle
-
-Generated capabilities move through:
-
-1. `generated_temporary`
-2. sandbox validation + execution
-3. evaluator acceptance/rejection
-4. accepted → `generated_candidate`
-5. later promotion path → `approved_stable`
-
-Rejected capabilities are marked `rejected` and not reused.
-
-## Sandboxed Generation Path
-
-Generated capability flow:
-
-1. create `CapabilitySpec`
-2. call abstract code generation provider
-3. validate package structure in sandbox
-4. run sandbox evaluation
-5. evaluator verifies evidence + safety compliance
-6. register resulting capability and audit artifacts
-
-> ⚠️ Generated capabilities are powerful. Run only in isolated environments and keep `ARGUS_ALLOW_GENERATED_CODE_EXECUTION=false` unless you have strong containment controls.
-
-## Memory of Learned Capabilities
-
-Argus stores capability usage records (JSON-backed path by default):
-
-- capability id
-- task
-- success/failure
-- reason
-- timestamp
-
-This enables deterministic reuse and future persistence upgrades.
-
-## Configuration
-
-Copy example config:
-
-```bash
-cp .env.example .env
+```text
+capabilities/
+  generated/
+    capability_id/
+      metadata.json
+      source.py
+      sandbox_result.json
+      evaluation.json
+      usage_log.json
 ```
 
-Required:
+This storage model is intentionally simple and DB-migration friendly.
 
-- `ARGUS_OPENAI_API_KEY`
-- `ARGUS_ALLOWED_DOMAINS`
+### Safety constraints
+- Generated capabilities never bypass `SafetyPolicy`.
+- Domain access is least-privilege and explicit.
+- Rejected capabilities are never reused.
+- Stable capabilities are preferred over generated ones.
 
-Capability-learning settings:
+> ⚠️ **Warning**: generated capability learning/execution must run in isolated environments. Do not enable it in shared production hosts without process/container isolation and strict runtime controls.
 
+## Configuration
+Generated capability controls:
 - `ARGUS_ENABLE_GENERATED_CAPABILITIES`
 - `ARGUS_SANDBOX_ENABLED`
-- `ARGUS_CAPABILITY_STORAGE_PATH`
-- `ARGUS_MAX_GENERATED_CAPABILITY_ATTEMPTS`
-- `ARGUS_EVALUATOR_STRICT_MODE`
-- `ARGUS_ALLOW_GENERATED_CODE_EXECUTION`
-- `ARGUS_GENERATED_CAPABILITY_TIMEOUT_SECONDS`
+- `ARGUS_GENERATED_CAPABILITY_STORAGE_PATH`
+- `ARGUS_GENERATED_CAPABILITY_TIMEOUT`
+- `ARGUS_GENERATED_CAPABILITY_PROMOTION_THRESHOLD`
+- `ARGUS_GENERATED_CAPABILITY_MAX_ATTEMPTS`
+- `ARGUS_CAPABILITY_MEMORY_ENABLED`
 
-## CLI Usage
-
+## CLI usage
 ```bash
 argus show-config
 argus list-skills
@@ -156,14 +80,3 @@ argus list-capabilities --kind all
 argus show-capability-memory
 argus run-amazon-task "Check whether my latest Amazon order has been delivered"
 ```
-
-## Security Considerations
-
-- Generated capabilities must declare domains.
-- Allowlist/blocklist checks are still enforced.
-- High-risk actions still require confirmation.
-- Audit records remain mandatory for traceability.
-- Credentials remain provider-mediated.
-- Do not run generated capabilities outside isolated sandboxes.
-
-See [SECURITY.md](SECURITY.md) for operational guidance.
