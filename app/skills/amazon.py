@@ -69,6 +69,13 @@ class OpenOrdersPageSkill:
 
     def execute(self, arguments: dict[str, str], context: SkillContext) -> AgentObservation:
         url = "https://www.amazon.com/gp/your-account/order-history"
+        current = context.browser.current_url()
+        if current and "amazon.com" not in current:
+            return _missing_observation(
+                "Amazon orders page not reachable after navigation",
+                reason="orders_page_not_reachable",
+                url=current,
+            )
         try:
             context.browser.open_url(url)
             if "amazon.com" not in context.browser.current_url():

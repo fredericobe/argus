@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -7,12 +8,18 @@ from app.capabilities.models import CapabilityUsageRecord
 
 
 class CapabilityMemory:
-    """Memória simples (JSON) de execuções para permitir reuso determinístico."""
+    """Persistent JSON memory for conservative capability reuse."""
+
     def __init__(self, storage_path: Path) -> None:
         self.storage_path = storage_path
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         self._records: list[CapabilityUsageRecord] = []
         self._load()
+
+    @staticmethod
+    def normalize_task_signature(task: str) -> str:
+        normalized = " ".join(task.lower().split())
+        return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
     def record(self, record: CapabilityUsageRecord) -> None:
         self._records.append(record)
@@ -22,8 +29,16 @@ class CapabilityMemory:
         return list(self._records)
 
     def successful_for_task(self, task: str) -> list[CapabilityUsageRecord]:
-        normalized = task.lower()
-        return [r for r in self._records if r.success and r.task.lower() == normalized]
+        sig = self.normalize_task_signature(task)
+        return [r for r in self._records if r.success and ((r.task_signature and r.task_signature == sig) or (not r.task_signature and self.normalize_task_signature(r.task) == sig))]
+
+    def confidence_for_capability(self, capability_id: str) -> float:
+        records = [r for r in self._records if r.capability_id == capability_id]
+        if not records:
+            return 0.0
+        successes = sum(1 for r in records if r.success)
+        avg_score = sum(r.evaluator_score for r in records) / len(records)
+        return round((successes / len(records)) * 0.6 + avg_score * 0.4, 3)
 
     def _load(self) -> None:
         if not self.storage_path.exists():

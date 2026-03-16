@@ -11,6 +11,10 @@ ObservationType = Literal[
     "skill_completed",
     "error_occurred",
     "task_finished",
+    "generated_capability_created",
+    "generated_capability_reused",
+    "generated_capability_rejected",
+    "generated_capability_execution_failed",
 ]
 
 

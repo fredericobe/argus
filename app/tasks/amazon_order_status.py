@@ -5,7 +5,8 @@ from app.builder.builder import CapabilityBuilder
 from app.builder.code_provider import StubCodeGenerationProvider
 from app.builder.evaluator import CapabilityEvaluator
 from app.builder.sandbox import SandboxRunner
-from app.capabilities.lifecycle import CapabilityLifecycle
+from app.capabilities.artifacts import CapabilityArtifactStore
+from app.capabilities.lifecycle import CapabilityLifecycle, PromotionPolicy
 from app.capabilities.memory import CapabilityMemory
 from app.capabilities.registry import CapabilityRegistry
 from app.capabilities.resolver import CapabilityResolver
@@ -73,15 +74,16 @@ class AmazonOrderStatusTask:
             capability_registry.register(capability)
 
         memory = CapabilityMemory(runtime_settings.capability_storage_path)
-        resolver = CapabilityResolver(capability_registry, policy)
+        resolver = CapabilityResolver(capability_registry, policy, memory=memory)
         builder = CapabilityBuilder(
             code_provider=StubCodeGenerationProvider(),
             sandbox=SandboxRunner(
                 enabled=runtime_settings.sandbox_enabled,
-                timeout_seconds=runtime_settings.generated_capability_timeout_seconds,
+                timeout_seconds=runtime_settings.generated_capability_timeout,
             ),
             evaluator=CapabilityEvaluator(policy, strict_mode=runtime_settings.evaluator_strict_mode),
-            lifecycle=CapabilityLifecycle(),
+            lifecycle=CapabilityLifecycle(PromotionPolicy(min_evaluator_score=runtime_settings.generated_capability_promotion_threshold)),
+            artifact_store=CapabilityArtifactStore(runtime_settings.generated_capability_storage_path),
         )
 
         skill_context = SkillContext(browser=browser, credentials=self.credentials)
@@ -94,6 +96,8 @@ class AmazonOrderStatusTask:
             capability_resolver=resolver,
             capability_builder=builder,
             capability_memory=memory,
+            generated_sandbox=SandboxRunner(enabled=runtime_settings.sandbox_enabled, timeout_seconds=runtime_settings.generated_capability_timeout),
+            artifact_store=CapabilityArtifactStore(runtime_settings.generated_capability_storage_path),
             enable_generated_capabilities=runtime_settings.enable_generated_capabilities,
         )
 

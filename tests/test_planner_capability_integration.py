@@ -91,4 +91,4 @@ def test_generated_path_returns_structured_observation_and_no_crash(tmp_path: Pa
     runtime = _runtime(FakePlannerGenerated(), tmp_path, generated_enabled=True)
     final_obs, audit = runtime.run("do new thing", "start")
     assert final_obs.kind == "task_finished"
-    assert audit[0].observation_kind in {"skill_completed", "error_occurred"}
+    assert audit[0].observation_kind in {"skill_completed", "error_occurred", "generated_capability_created", "generated_capability_reused"}
