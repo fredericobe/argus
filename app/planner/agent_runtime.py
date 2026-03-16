@@ -42,6 +42,7 @@ class AgentRuntime:
                     available_skills=self.skill_registry.names() + ["finish"],
                 )
             except Exception as exc:  # noqa: BLE001
+                logger.exception("planner_failure step=%s error=%s", step, exc)
                 observation = AgentObservation(kind="error_occurred", message=f"Planner failed: {exc}")
                 audit = StepAuditRecord(
                     step=step,
@@ -80,8 +81,25 @@ class AgentRuntime:
                         raise RuntimeError("Destructive skill requested without explicit confirmation")
                 observation = self.skill_registry.execute(decision.skill_name, decision.arguments, self.skill_context)
                 error = None
+            except RuntimeError as exc:
+                message = str(exc)
+                failure_type = "skill_execution_failure"
+                if "Navigation failed" in message or "selector" in message.lower():
+                    failure_type = "browser_interaction_failure"
+                logger.exception("%s step=%s skill=%s error=%s", failure_type, step, decision.skill_name, exc)
+                observation = AgentObservation(
+                    kind="error_occurred",
+                    message=f"Skill execution failed: {exc}",
+                    data={"failure_type": failure_type, "skill": decision.skill_name},
+                )
+                error = str(exc)
             except Exception as exc:  # noqa: BLE001
-                observation = AgentObservation(kind="error_occurred", message=f"Skill execution failed: {exc}")
+                logger.exception("validation_failure step=%s skill=%s error=%s", step, decision.skill_name, exc)
+                observation = AgentObservation(
+                    kind="error_occurred",
+                    message=f"Skill validation failed: {exc}",
+                    data={"failure_type": "validation_failure", "skill": decision.skill_name},
+                )
                 error = str(exc)
 
             audit = StepAuditRecord(

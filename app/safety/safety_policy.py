@@ -28,8 +28,7 @@ class SafetyPolicy:
         return self._is_destructive(skill_name, arguments)
 
     def _check_domain(self, url: str) -> None:
-        parsed = urlparse(url)
-        host = (parsed.hostname or "").lower().strip(".")
+        host = self._extract_normalized_hostname(url)
         if not host:
             raise SafetyViolationError("URL must contain a valid domain")
 
@@ -41,7 +40,34 @@ class SafetyPolicy:
 
     @classmethod
     def _matches_any_domain(cls, host: str, domains: list[str]) -> bool:
-        return any(cls._is_exact_or_subdomain(host, domain.lower().strip(".")) for domain in domains if domain)
+        return any(
+            cls._is_exact_or_subdomain(host, cls._normalize_domain_rule(domain))
+            for domain in domains
+            if domain
+        )
+
+    @staticmethod
+    def _extract_normalized_hostname(url: str) -> str:
+        # urlparse only extracts hostname reliably when a netloc exists.
+        # Support values that may omit the scheme, e.g. "amazon.com:443/path".
+        parsed = urlparse(url if "://" in url else f"//{url}", scheme="https")
+        host = parsed.hostname
+        if not host:
+            return ""
+
+        return SafetyPolicy._normalize_domain_rule(host)
+
+    @staticmethod
+    def _normalize_domain_rule(domain: str) -> str:
+        normalized = domain.strip().lower().strip(".")
+        if not normalized:
+            return ""
+
+        # Normalize IDN domains deterministically.
+        try:
+            return normalized.encode("idna").decode("ascii")
+        except UnicodeError:
+            return normalized
 
     @staticmethod
     def _is_exact_or_subdomain(host: str, domain: str) -> bool:

@@ -12,6 +12,10 @@ from app.planner.prompts import SYSTEM_PROMPT, build_planner_prompt
 logger = logging.getLogger(__name__)
 
 
+class PlannerOutputError(ValueError):
+    """Raised when structured planner output cannot be parsed or validated."""
+
+
 class Planner(Protocol):
     def next_decision(
         self,
@@ -56,21 +60,46 @@ class LLMPlanner:
                     },
                 ],
             )
-            text = response.output_text.strip()
+            text = self._extract_response_text(response)
             try:
                 decision = self._parse_and_validate(text, available_skills)
                 return decision
             except (json.JSONDecodeError, ValidationError, ValueError, TypeError) as exc:
                 last_error = exc
                 logger.warning(
-                    "planner_malformed_response=%s",
-                    json.dumps({"attempt": attempt, "error": str(exc), "raw": text}, default=str),
+                    "planner_validation_failure=%s",
+                    json.dumps(
+                        {
+                            "attempt": attempt,
+                            "error": str(exc),
+                            "raw": text,
+                            "available_skills": available_skills,
+                        },
+                        default=str,
+                    ),
                 )
 
-        raise ValueError("Planner returned invalid structured output after retry") from last_error
+        raise PlannerOutputError("Planner returned invalid structured output after retry") from last_error
+
+    @staticmethod
+    def _extract_response_text(response: Any) -> str:
+        output_text = getattr(response, "output_text", None)
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text.strip()
+
+        chunks: list[str] = []
+        for item in getattr(response, "output", []) or []:
+            for content in getattr(item, "content", []) or []:
+                text = getattr(content, "text", None)
+                if isinstance(text, str) and text.strip():
+                    chunks.append(text.strip())
+        return "\n".join(chunks).strip()
 
     @staticmethod
     def _parse_and_validate(text: str, available_skills: list[str]) -> PlannerDecision:
+        if not text:
+            raise ValueError("Planner response was empty")
+
         payload = json.loads(text)
         if not isinstance(payload, dict):
             raise ValueError("Planner payload must be a JSON object")
@@ -82,10 +111,8 @@ class LLMPlanner:
 
         if not isinstance(decision.arguments, dict):
             raise ValueError("Planner arguments must be an object")
-        for k, v in decision.arguments.items():
+        for k in decision.arguments:
             if not isinstance(k, str):
                 raise TypeError("Planner argument keys must be strings")
-            if not isinstance(v, str):
-                raise TypeError("Planner argument values must be strings")
 
         return decision
