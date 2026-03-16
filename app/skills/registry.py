@@ -1,3 +1,4 @@
+from app.capabilities.models import Capability, CapabilityStatus, CapabilityType, ImplementationKind
 from app.skills.amazon import (
     ExtractOrderStatusSkill,
     GetLatestOrderSkill,
@@ -9,6 +10,7 @@ from app.skills.common import ExtractTextFromPageSkill, NavigateToUrlSkill
 
 
 class SkillRegistry:
+    """Registro de skills estáveis com lookup e execução por nome."""
     def __init__(self, skills: list[Skill]) -> None:
         self._skills = {skill.name: skill for skill in skills}
 
@@ -32,3 +34,22 @@ DEFAULT_SKILLS: list[Skill] = [
     GetLatestOrderSkill(),
     ExtractOrderStatusSkill(),
 ]
+
+
+def stable_capabilities_from_skills(skills: list[Skill]) -> list[Capability]:
+    return [
+        Capability(
+            id=f"stable-{skill.name}",
+            name=skill.name,
+            description=skill.description,
+            status=CapabilityStatus.STABLE,
+            capability_type=CapabilityType.STABLE,
+            implementation_kind=ImplementationKind.SKILL,
+            implementation_ref=skill.name,
+            allowed_domains=["amazon.com", "www.amazon.com"],
+            author="argus",
+            source="builtin_skill",
+            tags=["stable", "skill"],
+        )
+        for skill in skills
+    ]

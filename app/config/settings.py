@@ -33,6 +33,14 @@ class ArgusSettings(BaseSettings):
     blocked_domains: list[str] = Field(default_factory=list, alias="ARGUS_BLOCKED_DOMAINS")
     log_level: str = Field(default="INFO", alias="ARGUS_LOG_LEVEL")
 
+    enable_generated_capabilities: bool = Field(default=False, alias="ARGUS_ENABLE_GENERATED_CAPABILITIES")
+    sandbox_enabled: bool = Field(default=True, alias="ARGUS_SANDBOX_ENABLED")
+    capability_storage_path: Path = Field(default=Path(".argus/capability_memory.json"), alias="ARGUS_CAPABILITY_STORAGE_PATH")
+    max_generated_capability_attempts: int = Field(default=2, alias="ARGUS_MAX_GENERATED_CAPABILITY_ATTEMPTS")
+    evaluator_strict_mode: bool = Field(default=True, alias="ARGUS_EVALUATOR_STRICT_MODE")
+    allow_generated_code_execution: bool = Field(default=False, alias="ARGUS_ALLOW_GENERATED_CODE_EXECUTION")
+    generated_capability_timeout_seconds: int = Field(default=10, alias="ARGUS_GENERATED_CAPABILITY_TIMEOUT_SECONDS")
+
     @field_validator("allowed_domains", "blocked_domains", mode="before")
     @classmethod
     def _parse_csv_domains(cls, value: str | list[str]) -> list[str]:
@@ -48,4 +56,5 @@ def get_settings() -> ArgusSettings:
     settings = ArgusSettings()
     settings.screenshot_dir.mkdir(parents=True, exist_ok=True)
     settings.session_state_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.capability_storage_path.parent.mkdir(parents=True, exist_ok=True)
     return settings
