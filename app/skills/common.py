@@ -10,8 +10,11 @@ class NavigateToUrlSkill:
         url = arguments.get("url", "")
         if not url:
             return AgentObservation(kind="error_occurred", message="Missing required argument: url")
-        opened = context.browser.open_url(url)
-        return AgentObservation(kind="navigation_complete", message=f"Opened {opened}", data={"url": opened})
+        try:
+            opened = context.browser.open_url(url)
+            return AgentObservation(kind="navigation_complete", message=f"Opened {opened}", data={"url": opened})
+        except RuntimeError as exc:
+            return AgentObservation(kind="error_occurred", message=f"Navigation failed: {exc}", data={"url": url})
 
 
 class ExtractTextFromPageSkill:
@@ -22,9 +25,16 @@ class ExtractTextFromPageSkill:
         selector = arguments.get("selector", "")
         if not selector:
             return AgentObservation(kind="error_occurred", message="Missing required argument: selector")
-        value = context.browser.extract_text(selector)
-        return AgentObservation(
-            kind="text_extracted",
-            message=f"Extracted text from {selector}",
-            data={"selector": selector, "text": value},
-        )
+        try:
+            value = context.browser.extract_text(selector)
+            return AgentObservation(
+                kind="text_extracted",
+                message=f"Extracted text from {selector}",
+                data={"selector": selector, "text": value},
+            )
+        except RuntimeError as exc:
+            return AgentObservation(
+                kind="error_occurred",
+                message=f"Text extraction failed for {selector}: {exc}",
+                data={"selector": selector},
+            )

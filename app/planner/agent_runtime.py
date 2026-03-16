@@ -33,36 +33,51 @@ class AgentRuntime:
 
         for step in range(1, self.safety_policy.max_steps + 1):
             self.safety_policy.check_step_limit(step)
-            decision = self.planner.next_decision(
-                user_request=user_request,
-                last_observation=last_observation.message,
-                step=step,
-                available_skills=self.skill_registry.names() + ["finish"],
-            )
+
+            try:
+                decision = self.planner.next_decision(
+                    user_request=user_request,
+                    last_observation=last_observation.message,
+                    step=step,
+                    available_skills=self.skill_registry.names() + ["finish"],
+                )
+            except Exception as exc:  # noqa: BLE001
+                observation = AgentObservation(kind="error_occurred", message=f"Planner failed: {exc}")
+                audit = StepAuditRecord(
+                    step=step,
+                    planner_decision="planner_error",
+                    skill_name="planner",
+                    arguments={},
+                    observation_kind=observation.kind,
+                    observation_message=observation.message,
+                    error=str(exc),
+                )
+                audit_records.append(audit)
+                self._log_trace(audit)
+                return observation, audit_records
 
             if decision.is_complete or decision.skill_name == "finish":
                 final_obs = AgentObservation(
                     kind="task_finished",
                     message=decision.final_response or "Task complete",
                 )
-                audit_records.append(
-                    StepAuditRecord(
-                        step=step,
-                        planner_decision=decision.rationale,
-                        skill_name="finish",
-                        arguments={},
-                        observation_kind=final_obs.kind,
-                        observation_message=final_obs.message,
-                    )
+                audit = StepAuditRecord(
+                    step=step,
+                    planner_decision=decision.rationale,
+                    skill_name="finish",
+                    arguments={},
+                    observation_kind=final_obs.kind,
+                    observation_message=final_obs.message,
                 )
+                audit_records.append(audit)
+                self._log_trace(audit)
                 return final_obs, audit_records
 
-            self.safety_policy.validate_skill(decision.skill_name, decision.arguments)
-            if self.safety_policy.requires_confirmation_for_skill(decision.skill_name, decision.arguments):
-                if not self.confirmation_hook(decision):
-                    raise RuntimeError("Destructive skill requested without explicit confirmation")
-
             try:
+                self.safety_policy.validate_skill(decision.skill_name, decision.arguments)
+                if self.safety_policy.requires_confirmation_for_skill(decision.skill_name, decision.arguments):
+                    if not self.confirmation_hook(decision):
+                        raise RuntimeError("Destructive skill requested without explicit confirmation")
                 observation = self.skill_registry.execute(decision.skill_name, decision.arguments, self.skill_context)
                 error = None
             except Exception as exc:  # noqa: BLE001
@@ -79,8 +94,29 @@ class AgentRuntime:
                 error=error,
             )
             audit_records.append(audit)
-            logger.info("agent_step=%s", json.dumps(audit.model_dump(mode="json"), default=str))
+            self._log_trace(audit)
             last_observation = observation
 
         final_obs = AgentObservation(kind="task_finished", message="Stopped due to max step limit")
         return final_obs, audit_records
+
+    @staticmethod
+    def _log_trace(audit: StepAuditRecord) -> None:
+        logger.info(
+            "agent_trace=%s",
+            json.dumps(
+                {
+                    "timestamp": audit.timestamp.isoformat(),
+                    "step": audit.step,
+                    "planner_decision": audit.planner_decision,
+                    "skill": audit.skill_name,
+                    "arguments": audit.arguments,
+                    "result": {
+                        "kind": audit.observation_kind,
+                        "message": audit.observation_message,
+                    },
+                    "error": audit.error,
+                },
+                default=str,
+            ),
+        )
