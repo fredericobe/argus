@@ -6,75 +6,127 @@ Example user goal:
 
 > "Check whether my latest Amazon order has been delivered."
 
-## Architecture (Planner → Skills → Executor → Observation)
+## Architecture
 
-Argus now uses a modern operator-agent loop:
+Argus now supports a capability-oriented execution loop:
 
 ```text
 User Request
    ↓
 Planner (LLM)
    ↓
-Skill Selection
+Capability Resolver
    ↓
-Executor (Playwright)
+Capability Type Decision
+   ├─ Stable skill-backed capability
+   ├─ Learned capability
+   ├─ Generated temporary capability (sandboxed)
+   └─ Human confirmation / safe fail
    ↓
-Structured Observation
+Executor / Sandbox
    ↓
-Planner (next step)
+Observation + Audit
+   ↓
+Evaluator / Critic
+   ↓
+Capability Memory + Promotion lifecycle
 ```
 
-### Components
+### Core Components
 
 - **Planner (`app/planner/`)**
-  - Decides the next high-level skill.
-  - Never contains browser operations.
+  - Produces structured next actions.
+- **Capabilities (`app/capabilities/`)**
+  - First-class model for stable, learned, and generated capabilities.
+  - Includes registry, resolver, lifecycle, and memory.
 - **Skills (`app/skills/`)**
-  - High-level site operations like `login_amazon`, `open_orders_page`, `extract_order_status`.
-  - Encapsulate workflow behavior while delegating low-level operations.
+  - Existing stable skills remain unchanged and are wrapped as stable capabilities.
+- **Builder (`app/builder/`)**
+  - Builds temporary capabilities via spec → code provider → sandbox → evaluator.
 - **Executors (`app/executors/`)**
-  - Low-level interaction layer (`BrowserExecutor`).
-  - No task-specific business logic.
+  - Low-level browser actions and interaction primitives.
 - **Safety (`app/safety/`)**
-  - Enforces domain allowlist/blocklist, max step limits, destructive-action confirmation policy.
+  - Domain allow/block rules, max steps, destructive-action confirmation.
 - **Credentials (`app/credentials/`)**
-  - Composite secret retrieval from keyring/env providers.
-  - No credentials in business logic.
+  - Composite provider; generated capabilities do not bypass this path.
 - **Observability (`app/models/audit.py`)**
-  - Per-step structured audit records:
-    - timestamp
-    - planner decision
-    - selected skill
-    - arguments
-    - resulting observation
-    - error (if present)
+  - Per-step, auditable records across stable and generated paths.
 
-## Running Argus in an Isolated Environment
+## Capability Model
 
-**Recommended setup for a fresh VM**
+Each capability tracks:
 
-1. Create a dedicated VM (no personal sessions).
-2. Use low-privilege accounts only.
-3. Restrict egress network to needed domains.
-4. Store credentials in keyring when possible.
+- id, name, description, version
+- status, risk_level, capability_type
+- allowed_domains, required_inputs, expected_outputs
+- implementation_kind, tags, author/source
+- created_at, updated_at
 
-### Fresh VM quickstart (Ubuntu-like)
+Supported types:
 
-```bash
-sudo apt update
-sudo apt install -y python3.12 python3.12-venv git
+- `stable`
+- `learned`
+- `generated_temporary`
+- `generated_candidate`
 
-git clone <your-repo-url> argus
-cd argus
+Supported implementation kinds:
 
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -e .[dev]
-playwright install chromium
-```
+- `skill`
+- `browser_workflow`
+- `api_adapter`
+- `generated_code`
+
+## Capability Resolver
+
+Resolution order is explicit and auditable:
+
+1. Stable capability match
+2. Learned capability match
+3. Generated capability path
+4. Human confirmation or safe failure
+
+High-risk capabilities return a confirmation path instead of direct execution.
+
+## Generated Capability Lifecycle
+
+Generated capabilities move through:
+
+1. `generated_temporary`
+2. sandbox validation + execution
+3. evaluator acceptance/rejection
+4. accepted → `generated_candidate`
+5. later promotion path → `approved_stable`
+
+Rejected capabilities are marked `rejected` and not reused.
+
+## Sandboxed Generation Path
+
+Generated capability flow:
+
+1. create `CapabilitySpec`
+2. call abstract code generation provider
+3. validate package structure in sandbox
+4. run sandbox evaluation
+5. evaluator verifies evidence + safety compliance
+6. register resulting capability and audit artifacts
+
+> ⚠️ Generated capabilities are powerful. Run only in isolated environments and keep `ARGUS_ALLOW_GENERATED_CODE_EXECUTION=false` unless you have strong containment controls.
+
+## Memory of Learned Capabilities
+
+Argus stores capability usage records (JSON-backed path by default):
+
+- capability id
+- task
+- success/failure
+- reason
+- timestamp
+
+This enables deterministic reuse and future persistence upgrades.
 
 ## Configuration
+
+Copy example config:
 
 ```bash
 cp .env.example .env
@@ -85,72 +137,33 @@ Required:
 - `ARGUS_OPENAI_API_KEY`
 - `ARGUS_ALLOWED_DOMAINS`
 
-Important safety settings:
+Capability-learning settings:
 
-- `ARGUS_BLOCKED_DOMAINS`
-- `ARGUS_MAX_AGENT_STEPS`
-- `ARGUS_HEADLESS`
-
-## Credential Storage
-
-No credentials are hardcoded.
-
-### Option A (recommended): OS keyring
-
-```bash
-python -m keyring set argus amazon.username
-python -m keyring set argus amazon.password
-```
-
-### Option B: environment variables (development convenience)
-
-- `ARGUS_AMAZON_USERNAME`
-- `ARGUS_AMAZON_PASSWORD`
+- `ARGUS_ENABLE_GENERATED_CAPABILITIES`
+- `ARGUS_SANDBOX_ENABLED`
+- `ARGUS_CAPABILITY_STORAGE_PATH`
+- `ARGUS_MAX_GENERATED_CAPABILITY_ATTEMPTS`
+- `ARGUS_EVALUATOR_STRICT_MODE`
+- `ARGUS_ALLOW_GENERATED_CODE_EXECUTION`
+- `ARGUS_GENERATED_CAPABILITY_TIMEOUT_SECONDS`
 
 ## CLI Usage
 
-Show runtime config (secrets redacted):
-
 ```bash
 argus show-config
-```
-
-List planner-available skills:
-
-```bash
 argus list-skills
-```
-
-Run Amazon task:
-
-```bash
+argus list-capabilities --kind all
+argus show-capability-memory
 argus run-amazon-task "Check whether my latest Amazon order has been delivered"
 ```
 
-Run with overrides:
-
-```bash
-argus run-amazon-task "Check latest order" --headed --max-steps 15
-```
-
-
-## Security Hardening
-
-Recent hardening work adds stricter controls across planning, execution, and auditing:
-
-- **Strict domain validation** now allows only exact allowlist domains or their subdomains (for example: `amazon.com`, `www.amazon.com`, `orders.amazon.com`). Substring matches like `evilamazon.com` are rejected.
-- **Structured planner outputs** are schema-validated (`skill`, `arguments`, `reasoning`, `done`) with skill-name validation, argument-type checks, malformed-response logging, and one retry on parse/validation failure.
-- **Safer execution model** wraps Playwright failures in controlled runtime errors so skills can return structured failure observations instead of crashing the loop.
-- **Improved skill robustness** centralizes Amazon selectors with fallbacks and validates element presence before extraction.
-  - Amazon skills now return explicit structured errors for common failures: `login_not_completed`, `orders_page_not_reachable`, `latest_order_not_found`, and `status_selector_not_found`.
-- **Step-level JSON trace logs** include timestamp, planner decision, skill, arguments, result, and error for each iteration.
-
-## Known Limitations
-
-- Amazon UI changes can break selectors.
-- CAPTCHA/MFA may require manual intervention.
-- LLM output remains probabilistic.
-
 ## Security Considerations
+
+- Generated capabilities must declare domains.
+- Allowlist/blocklist checks are still enforced.
+- High-risk actions still require confirmation.
+- Audit records remain mandatory for traceability.
+- Credentials remain provider-mediated.
+- Do not run generated capabilities outside isolated sandboxes.
 
 See [SECURITY.md](SECURITY.md) for operational guidance.
