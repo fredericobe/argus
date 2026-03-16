@@ -1,9 +1,10 @@
+import json
 from types import SimpleNamespace
 
 import pytest
 
 from app.config.settings import ArgusSettings
-from app.planner.planner import LLMPlanner
+from app.planner.planner import LLMPlanner, PlannerOutputError
 
 
 class FakeResponses:
@@ -40,9 +41,9 @@ def test_parse_and_validate_enforces_skill_and_argument_types() -> None:
             ["navigate_to_url", "finish"],
         )
 
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError):
         LLMPlanner._parse_and_validate(
-            '{"skill":"navigate_to_url","arguments":{"url":1},"reasoning":"go","done":false}',
+            '{"skill":"navigate_to_url","arguments":"not-an-object","reasoning":"go","done":false}',
             ["navigate_to_url", "finish"],
         )
 
@@ -70,10 +71,15 @@ def test_next_decision_fails_after_retry() -> None:
     planner = LLMPlanner(_settings())
     planner.client = FakeClient(outputs=["not-json", "still-not-json"])
 
-    with pytest.raises(ValueError):
+    with pytest.raises(PlannerOutputError):
         planner.next_decision(
             user_request="test",
             last_observation="start",
             step=1,
             available_skills=["navigate_to_url", "finish"],
         )
+
+
+def test_parse_and_validate_rejects_malformed_json() -> None:
+    with pytest.raises(json.JSONDecodeError):
+        LLMPlanner._parse_and_validate("{", ["navigate_to_url", "finish"])

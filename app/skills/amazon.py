@@ -14,6 +14,10 @@ def _resolve_selector(context: SkillContext, selector_name: str, override: str |
     return selector_set.primary
 
 
+def _missing_observation(message: str, reason: str, **data: str) -> AgentObservation:
+    return AgentObservation(kind="error_occurred", message=message, data={"reason": reason, **data})
+
+
 class LoginAmazonSkill:
     name = "login_amazon"
     description = "Log into Amazon using credential provider values."
@@ -40,12 +44,22 @@ class LoginAmazonSkill:
             context.browser.wait_for_selector(password_sel)
             context.browser.type_text(password_sel, password)
             context.browser.click(submit_sel)
+
+            # Amazon can show extra auth challenges (CAPTCHA/MFA), so this only
+            # validates that the sign-in form disappeared, not that the account is fully authenticated.
+            if context.browser.selector_exists(password_sel):
+                return _missing_observation(
+                    "Amazon login not completed; sign-in form is still present",
+                    reason="login_not_completed",
+                    selector=password_sel,
+                )
+
             return AgentObservation(kind="skill_completed", message="Attempted Amazon login")
         except RuntimeError as exc:
             return AgentObservation(
                 kind="error_occurred",
-                message=f"Amazon login failed: {exc}",
-                data={"skill": self.name},
+                message=f"Amazon login interaction failed: {exc}",
+                data={"skill": self.name, "reason": "browser_interaction_failure"},
             )
 
 
@@ -57,9 +71,19 @@ class OpenOrdersPageSkill:
         url = "https://www.amazon.com/gp/your-account/order-history"
         try:
             context.browser.open_url(url)
+            if "amazon.com" not in context.browser.current_url():
+                return _missing_observation(
+                    "Amazon orders page not reachable after navigation",
+                    reason="orders_page_not_reachable",
+                    url=url,
+                )
             return AgentObservation(kind="page_loaded", message="Opened Amazon orders page", data={"url": url})
         except RuntimeError as exc:
-            return AgentObservation(kind="error_occurred", message=f"Failed to open orders page: {exc}", data={"url": url})
+            return AgentObservation(
+                kind="error_occurred",
+                message=f"Amazon orders page not reachable: {exc}",
+                data={"url": url, "reason": "orders_page_not_reachable"},
+            )
 
 
 class GetLatestOrderSkill:
@@ -77,10 +101,10 @@ class GetLatestOrderSkill:
                 data={"selector": selector},
             )
         except RuntimeError as exc:
-            return AgentObservation(
-                kind="error_occurred",
-                message=f"Could not locate latest order container using selector '{selector}': {exc}",
-                data={"selector": selector},
+            return _missing_observation(
+                f"Latest order not found using selector '{selector}': {exc}",
+                reason="latest_order_not_found",
+                selector=selector,
             )
 
 
@@ -94,21 +118,28 @@ class ExtractOrderStatusSkill:
 
         try:
             if not context.browser.selector_exists(selector):
-                return AgentObservation(
-                    kind="error_occurred",
-                    message="Order status element not found on page",
-                    data={"selector": selector, "reason": "element_missing"},
+                return _missing_observation(
+                    "Order status selector not found on page",
+                    reason="status_selector_not_found",
+                    selector=selector,
                 )
 
             text = context.browser.extract_text(selector)
+            if not text.strip():
+                return _missing_observation(
+                    "Order status selector found but text was empty",
+                    reason="status_text_empty",
+                    selector=selector,
+                )
+
             return AgentObservation(
                 kind="text_extracted",
                 message="Extracted latest order status",
                 data={"selector": selector, "status": text},
             )
         except RuntimeError as exc:
-            return AgentObservation(
-                kind="error_occurred",
-                message=f"Order status extraction failed for selector '{selector}': {exc}",
-                data={"selector": selector, "reason": "extraction_failed"},
+            return _missing_observation(
+                f"Order status extraction failed for selector '{selector}': {exc}",
+                reason="extraction_failed",
+                selector=selector,
             )

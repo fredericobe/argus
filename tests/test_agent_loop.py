@@ -50,3 +50,30 @@ def test_agent_runtime_finishes_and_records_audit() -> None:
     assert final_observation.message == "done"
     assert len(audit) == 2
     assert audit[0].skill_name == "navigate_to_url"
+
+
+class BrokenPlanner:
+    def next_decision(
+        self,
+        user_request: str,
+        last_observation: str,
+        step: int,
+        available_skills: list[str],
+    ) -> PlannerDecision:
+        _ = (user_request, last_observation, step, available_skills)
+        raise ValueError("malformed planner output")
+
+
+def test_agent_runtime_returns_structured_planner_failure() -> None:
+    runtime = AgentRuntime(
+        planner=BrokenPlanner(),
+        skill_registry=SkillRegistry([NavigateSkill()]),
+        skill_context=SkillContext(browser=None, credentials=FakeCredentialProvider()),  # type: ignore[arg-type]
+        safety_policy=SafetyPolicy(allowed_domains=["amazon.com"], blocked_domains=[], max_steps=5),
+    )
+
+    final_observation, audit = runtime.run("check order", initial_observation="start")
+
+    assert final_observation.kind == "error_occurred"
+    assert "Planner failed" in final_observation.message
+    assert audit[0].skill_name == "planner"

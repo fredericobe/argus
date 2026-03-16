@@ -142,6 +142,7 @@ Recent hardening work adds stricter controls across planning, execution, and aud
 - **Structured planner outputs** are schema-validated (`skill`, `arguments`, `reasoning`, `done`) with skill-name validation, argument-type checks, malformed-response logging, and one retry on parse/validation failure.
 - **Safer execution model** wraps Playwright failures in controlled runtime errors so skills can return structured failure observations instead of crashing the loop.
 - **Improved skill robustness** centralizes Amazon selectors with fallbacks and validates element presence before extraction.
+  - Amazon skills now return explicit structured errors for common failures: `login_not_completed`, `orders_page_not_reachable`, `latest_order_not_found`, and `status_selector_not_found`.
 - **Step-level JSON trace logs** include timestamp, planner decision, skill, arguments, result, and error for each iteration.
 
 ## Known Limitations
