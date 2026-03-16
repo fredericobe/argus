@@ -133,6 +133,17 @@ Run with overrides:
 argus run-amazon-task "Check latest order" --headed --max-steps 15
 ```
 
+
+## Security Hardening
+
+Recent hardening work adds stricter controls across planning, execution, and auditing:
+
+- **Strict domain validation** now allows only exact allowlist domains or their subdomains (for example: `amazon.com`, `www.amazon.com`, `orders.amazon.com`). Substring matches like `evilamazon.com` are rejected.
+- **Structured planner outputs** are schema-validated (`skill`, `arguments`, `reasoning`, `done`) with skill-name validation, argument-type checks, malformed-response logging, and one retry on parse/validation failure.
+- **Safer execution model** wraps Playwright failures in controlled runtime errors so skills can return structured failure observations instead of crashing the loop.
+- **Improved skill robustness** centralizes Amazon selectors with fallbacks and validates element presence before extraction.
+- **Step-level JSON trace logs** include timestamp, planner decision, skill, arguments, result, and error for each iteration.
+
 ## Known Limitations
 
 - Amazon UI changes can break selectors.

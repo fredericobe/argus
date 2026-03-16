@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from playwright.sync_api import BrowserContext, Page, sync_playwright
+from playwright.sync_api import BrowserContext, Error as PlaywrightError, Page, TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 from app.config.settings import ArgusSettings
 
@@ -17,16 +17,19 @@ class BrowserExecutor:
         self._page: Page | None = None
 
     def start(self) -> None:
-        self._playwright = sync_playwright().start()
-        browser = self._playwright.chromium.launch(headless=self.settings.headless)
+        try:
+            self._playwright = sync_playwright().start()
+            browser = self._playwright.chromium.launch(headless=self.settings.headless)
 
-        context_options: dict[str, object] = {"viewport": {"width": 1366, "height": 900}}
-        if self.settings.session_state_path.exists():
-            context_options["storage_state"] = str(self.settings.session_state_path)
+            context_options: dict[str, object] = {"viewport": {"width": 1366, "height": 900}}
+            if self.settings.session_state_path.exists():
+                context_options["storage_state"] = str(self.settings.session_state_path)
 
-        self._context = browser.new_context(**context_options)
-        self._context.set_default_timeout(self.settings.default_timeout_seconds * 1000)
-        self._page = self._context.new_page()
+            self._context = browser.new_context(**context_options)
+            self._context.set_default_timeout(self.settings.default_timeout_seconds * 1000)
+            self._page = self._context.new_page()
+        except PlaywrightError as exc:
+            raise RuntimeError(f"Failed to start browser executor: {exc}") from exc
 
     def close(self) -> None:
         if self._context:
@@ -41,20 +44,41 @@ class BrowserExecutor:
         return self._page
 
     def open_url(self, url: str) -> str:
-        self.page.goto(url, timeout=self.settings.navigation_timeout_seconds * 1000)
-        return url
+        try:
+            self.page.goto(url, timeout=self.settings.navigation_timeout_seconds * 1000)
+            return url
+        except (PlaywrightError, PlaywrightTimeoutError) as exc:
+            raise RuntimeError(f"Navigation failed for {url}: {exc}") from exc
 
     def click(self, selector: str) -> None:
-        self.page.click(selector)
+        try:
+            self.page.click(selector)
+        except (PlaywrightError, PlaywrightTimeoutError) as exc:
+            raise RuntimeError(f"Click failed for selector '{selector}': {exc}") from exc
 
     def type_text(self, selector: str, text: str) -> None:
-        self.page.fill(selector, text)
+        try:
+            self.page.fill(selector, text)
+        except (PlaywrightError, PlaywrightTimeoutError) as exc:
+            raise RuntimeError(f"Typing failed for selector '{selector}': {exc}") from exc
 
     def extract_text(self, selector: str) -> str:
-        return self.page.locator(selector).first.inner_text().strip()
+        try:
+            return self.page.locator(selector).first.inner_text().strip()
+        except (PlaywrightError, PlaywrightTimeoutError) as exc:
+            raise RuntimeError(f"Text extraction failed for selector '{selector}': {exc}") from exc
 
-    def wait_for_selector(self, selector: str) -> None:
-        self.page.wait_for_selector(selector)
+    def wait_for_selector(self, selector: str, timeout_ms: int | None = None) -> None:
+        try:
+            self.page.wait_for_selector(selector, timeout=timeout_ms)
+        except (PlaywrightError, PlaywrightTimeoutError) as exc:
+            raise RuntimeError(f"Selector wait failed for '{selector}': {exc}") from exc
+
+    def selector_exists(self, selector: str) -> bool:
+        try:
+            return self.page.locator(selector).first.count() > 0
+        except PlaywrightError:
+            return False
 
     def take_screenshot(self, filename: str = "argus-debug.png") -> str:
         path = Path(self.settings.screenshot_dir) / filename

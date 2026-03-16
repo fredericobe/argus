@@ -16,17 +16,16 @@ Safety rules:
 
 Return strict JSON:
 {
-  "skill_name": "skill identifier",
+  "skill": "skill identifier",
   "arguments": {"key": "value"},
-  "rationale": "short reason",
-  "is_complete": false,
-  "final_response": null
+  "reasoning": "short reason",
+  "done": false
 }
 
 When goal is complete, set:
-- "is_complete": true
-- "skill_name": "finish"
-- "final_response": concise answer grounded in evidence
+- "done": true
+- "skill": "finish"
+- optionally include "final_response" with concise answer grounded in evidence
 """.strip()
 
 

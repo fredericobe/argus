@@ -28,15 +28,24 @@ class SafetyPolicy:
         return self._is_destructive(skill_name, arguments)
 
     def _check_domain(self, url: str) -> None:
-        netloc = urlparse(url).netloc.lower()
-        if not netloc:
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower().strip(".")
+        if not host:
             raise SafetyViolationError("URL must contain a valid domain")
 
-        if any(blocked in netloc for blocked in self.blocked_domains):
-            raise SafetyViolationError(f"Blocked domain access denied: {netloc}")
+        if self._matches_any_domain(host, self.blocked_domains):
+            raise SafetyViolationError(f"Blocked domain access denied: {host}")
 
-        if self.allowed_domains and not any(allowed in netloc for allowed in self.allowed_domains):
-            raise SafetyViolationError(f"Domain not in allowlist: {netloc}")
+        if self.allowed_domains and not self._matches_any_domain(host, self.allowed_domains):
+            raise SafetyViolationError(f"Domain not in allowlist: {host}")
+
+    @classmethod
+    def _matches_any_domain(cls, host: str, domains: list[str]) -> bool:
+        return any(cls._is_exact_or_subdomain(host, domain.lower().strip(".")) for domain in domains if domain)
+
+    @staticmethod
+    def _is_exact_or_subdomain(host: str, domain: str) -> bool:
+        return host == domain or host.endswith(f".{domain}")
 
     @staticmethod
     def _is_destructive(skill_name: str, arguments: dict[str, str]) -> bool:
