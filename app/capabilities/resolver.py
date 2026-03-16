@@ -9,6 +9,7 @@ from app.safety.safety_policy import SafetyPolicy, SafetyViolationError
 
 
 class ResolutionPath(str, Enum):
+    """Caminhos possíveis de resolução de capacidade para uma solicitação."""
     STABLE = "stable"
     LEARNED = "learned"
     GENERATED = "generated"
@@ -18,12 +19,14 @@ class ResolutionPath(str, Enum):
 
 @dataclass(slots=True)
 class CapabilityResolution:
+    """Resultado estruturado da resolução, preservando motivo para auditoria."""
     path: ResolutionPath
     capability: Capability | None
     reason: str
 
 
 class CapabilityResolver:
+    """Decide entre capacidade estável, aprendida, geração nova ou falha segura."""
     def __init__(self, registry: CapabilityRegistry, safety_policy: SafetyPolicy) -> None:
         self.registry = registry
         self.safety_policy = safety_policy

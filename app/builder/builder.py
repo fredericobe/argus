@@ -18,6 +18,7 @@ from app.capabilities.models import (
 
 @dataclass(slots=True)
 class BuildArtifacts:
+    """Artefatos auditáveis produzidos durante construção de capacidade gerada."""
     spec: CapabilitySpec
     source_code: str
     validation_result: dict[str, object]
@@ -26,11 +27,13 @@ class BuildArtifacts:
 
 @dataclass(slots=True)
 class BuildResult:
+    """Resultado final do build contendo capacidade e evidências do processo."""
     capability: Capability
     artifacts: BuildArtifacts
 
 
 class CapabilityBuilder:
+    """Pipeline de criação: spec -> provider -> sandbox -> evaluator -> lifecycle."""
     def __init__(
         self,
         code_provider: CodeGenerationProvider,

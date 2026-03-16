@@ -10,6 +10,7 @@ from app.skills.common import ExtractTextFromPageSkill, NavigateToUrlSkill
 
 
 class SkillRegistry:
+    """Registro de skills estáveis com lookup e execução por nome."""
     def __init__(self, skills: list[Skill]) -> None:
         self._skills = {skill.name: skill for skill in skills}
 

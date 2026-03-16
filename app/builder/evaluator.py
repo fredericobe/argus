@@ -9,12 +9,14 @@ from app.safety.safety_policy import SafetyPolicy, SafetyViolationError
 
 @dataclass(slots=True)
 class EvaluationResult:
+    """Veredito de qualidade/safety para uso e possível promoção da capacidade."""
     accepted: bool
     promotable: bool
     reason: str
 
 
 class CapabilityEvaluator:
+    """Critic que valida evidência, conformidade de domínio e aceitabilidade de saída."""
     def __init__(self, safety_policy: SafetyPolicy, strict_mode: bool = True) -> None:
         self.safety_policy = safety_policy
         self.strict_mode = strict_mode

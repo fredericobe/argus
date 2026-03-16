@@ -2,6 +2,7 @@ from app.capabilities.models import Capability, CapabilityStatus, CapabilityType
 
 
 class CapabilityLifecycle:
+    """Orquestra transições mínimas de estado para capacidades geradas/aprendidas."""
     def mark_candidate(self, capability: Capability) -> Capability:
         capability.status = CapabilityStatus.GENERATED_CANDIDATE
         capability.capability_type = CapabilityType.GENERATED_CANDIDATE

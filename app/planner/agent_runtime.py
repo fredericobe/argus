@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class AgentRuntime:
+    """Loop principal do agente que integra planner, skills e camada de capabilities."""
     def __init__(
         self,
         planner,

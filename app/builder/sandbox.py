@@ -7,12 +7,14 @@ from app.builder.code_provider import GeneratedCapabilityPackage
 
 @dataclass(slots=True)
 class SandboxResult:
+    """Resultado padronizado de validação/execução no ambiente isolado."""
     passed: bool
     output: dict[str, object]
     reason: str = ""
 
 
 class SandboxRunner:
+    """Executa verificações e execução controlada de capacidades geradas em sandbox."""
     def __init__(self, enabled: bool, timeout_seconds: int) -> None:
         self.enabled = enabled
         self.timeout_seconds = timeout_seconds

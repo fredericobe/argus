@@ -7,6 +7,7 @@ from app.capabilities.models import Capability, CapabilityType, RiskLevel
 
 
 class CapabilityRegistry:
+    """Catálogo em memória de capacidades com APIs de registro, busca e relevância."""
     def __init__(self) -> None:
         self._by_id: dict[str, Capability] = {}
         self._by_name: dict[str, str] = {}

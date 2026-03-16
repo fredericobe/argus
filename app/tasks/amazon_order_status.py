@@ -25,17 +25,20 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True, frozen=True)
 class AmazonTaskRunOptions:
+    """Opções de execução para o fluxo Amazon orientado a status de pedido."""
     headed: bool = False
     max_steps: int | None = None
 
 
 @dataclass(slots=True)
 class AmazonOrderStatusResult:
+    """Resumo final da execução da tarefa Amazon para consumo de CLI/API."""
     status_summary: str
     steps_taken: int
 
 
 class AmazonOrderStatusTask:
+    """Caso de uso que monta dependências e executa runtime para pedidos Amazon."""
     def __init__(self, settings: ArgusSettings) -> None:
         self.settings = settings
         self.credentials = CompositeCredentialProvider(

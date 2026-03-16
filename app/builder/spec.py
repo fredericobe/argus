@@ -8,6 +8,7 @@ from app.capabilities.models import RiskLevel
 
 
 class CapabilitySpec(BaseModel):
+    """Especificação declarativa usada para solicitar geração de nova capacidade."""
     name: str
     task: str
     description: str

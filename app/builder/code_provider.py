@@ -8,17 +8,19 @@ from app.builder.spec import CapabilitySpec
 
 @dataclass(slots=True)
 class GeneratedCapabilityPackage:
+    """Pacote de saída de geração com código, entrypoint e metadados."""
     source_code: str
     entrypoint: str
     manifest: dict[str, str]
 
 
 class CodeGenerationProvider(Protocol):
+    """Contrato para provedores de geração de código desacoplados do runtime."""
     def generate(self, spec: CapabilitySpec) -> GeneratedCapabilityPackage: ...
 
 
 class StubCodeGenerationProvider:
-    """Safe deterministic provider used for local development and tests."""
+    """Provider determinístico e seguro para desenvolvimento local e testes."""
 
     def generate(self, spec: CapabilitySpec) -> GeneratedCapabilityPackage:
         source = (

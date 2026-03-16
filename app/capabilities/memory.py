@@ -7,6 +7,7 @@ from app.capabilities.models import CapabilityUsageRecord
 
 
 class CapabilityMemory:
+    """Memória simples (JSON) de execuções para permitir reuso determinístico."""
     def __init__(self, storage_path: Path) -> None:
         self.storage_path = storage_path
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
